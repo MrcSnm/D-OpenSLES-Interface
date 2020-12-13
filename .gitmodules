@@ -1,0 +1,6 @@
+[submodule "bindbc-opensles"]
+	path = bindbc-opensles
+	url = https://www.github.com/MrcSnm/bindbc-opensles
+[submodule "external/ffmpeg"]
+	path = external/ffmpeg
+	url = git://source.ffmpeg.org/ffmpeg.git

@@ -1,0 +1,15 @@
+{
+	"authors": [
+		"Hipreme"
+	],
+	"targetType": "dynamicLibrary",
+	"importPaths": [
+		"source",
+		"bindbc-opensles"
+	],
+	
+	"copyright": "Copyright © 2020, Hipreme",
+	"description": "A human-friendly interface for using OpenSL ES on Android, it aims to support betterC",
+	"license": "proprietary",
+	"name": "opensles_interface"
+}

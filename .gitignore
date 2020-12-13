@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/opensles_interface
+opensles_interface.so
+opensles_interface.dylib
+opensles_interface.dll
+opensles_interface.a
+opensles_interface.lib
+opensles_interface-test-*
+*.exe
+*.o
+*.obj
+*.lst
