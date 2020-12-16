@@ -4,7 +4,7 @@
 *   https://medium.com/@donturner/using-ffmpeg-for-faster-audio-decoding-967894e94e71
 *
 *   Usage of this file:
-*   rdmd build.d androidVersion
+*   rdmd build.d androidVersion ffmpegPath (optional)buildTarget
 *
 */
 module ffmpeg.build;
@@ -29,6 +29,14 @@ enum archs =
     "arm64-v8a" : "aarch64-linux-android"
 ];
 
+enum archsFolders =
+[
+    "x86" : "x86",
+    "x86_64" : "x86_64",
+    "arm-v7a" : "armeabi-v7a",
+    "arm64-v8a" : "arm64-v8a"
+];
+
 string[] formats = 
 [
     "mp3",
@@ -38,13 +46,14 @@ string[] formats =
 string[] configCommand =
 [
     "target-os=android", //Android config
-    "enable-cross-compile",  //Android config
-    "enable-small", //Better size than speed(important on android)
     "disable-programs", //No cli program
     "disable-doc", //Better size
-    "enable-shared", //Build only shared
     "disable-static", //Don't build static lib
-    "disable-everything" //We will specify the modules that will get compiled
+    "disable-everything", //We will specify the modules that will get compiled
+    "disable-all",
+    "enable-shared", //Build only shared
+    "enable-cross-compile",  //Android config
+    "enable-small" //Better size than speed(important on android)
 ];
 
 string getNDK()
@@ -80,8 +89,11 @@ string buildConfigCommand(string architecture, string androidVersion, string too
     ///Strips debug symbols
     string stripCommand = "";
 
-    command~="--prefix="~outputPath~"build/"~archs[architecture]~" ";
-    command~="--arch="~architecture~" ";
+    command~="--prefix="~outputPath~archsFolders[architecture]~" ";
+    if(architecture == "arm64-v8a")
+        command~="--arch=aarch64 ";
+    else
+        command~="--arch="~architecture~" ";
 
     string additionalOpts = "";
     string toolchainPrefix = "";
@@ -164,7 +176,7 @@ version(Windows)
             writeln("No Git shell was found at '"~sh~"'\nChecking for msys\n--\n");
 
         //Check for msys shell
-        sh = "C:/msys64/msys2.exe";
+        sh = "C:/msys64/usr/bin/bash.exe";
         if(exists(sh))
             return sh;
         else
@@ -180,6 +192,7 @@ version(Windows)
                 {
                     writeln("Cleaning up '%APPDATA%/"~msys2Temp~"/"~msys2Installer~"'...");
                     rmdirRecurse(environment["APPDATA"]~"/"~msys2Temp);
+                    updateShell(sh);
                 }
                 return sh;
             }
@@ -233,6 +246,10 @@ version(Windows)
     bool installShell()
     {
         writeln("Write 'continue' and enter when you finish installing msys2\n");
+
+        writeln(`Please, note that some may need to install mingw-w64-binutils, for that, open a
+msys shell and type pacman -S mingw-w64-binutils, and it will work
+`);
         //Too complex to handle it
         auto p  = spawnShell("start "~environment["APPDATA"]~"/"~msys2Temp~"/"~msys2Installer);
         stdout.flush;
@@ -240,23 +257,85 @@ version(Windows)
         while((str = readln()) != "continue\n"){}
         return exists("C:/msys64");
     }
+
+    bool updateShell(string sh)
+    {
+        writeln("Updating shell with: \n\tpacman -Syuu\n\tpacman -S mingw-w64-binutils\n");
+        return wait(spawnShell(sh~" yes | pacman -Syuu && yes | pacman -S mingw-w64-binutils")) == 0;
+    }
 }
 else{string getShell(){return "";}}
 
 
-version(Windows){string make = "mingw32-make";}
-else{string make = "make";}
-int main()
+void showUsage()
 {
-    writeln(getShell());
-    return SUCCESS;
+    writeln(`Usage for this build automation:
+
+rdmd build.d androidVersion ffmpegPath (optional)buildTarget, e.g:
+rdmd build.d 21 ../external/ffmpeg/ x86
+
+Accepted values for buildTarget:
+    x86
+    x86_64
+    arm-v7a
+    arm64-v8a
+
+The output path is the current working dir.`);
+}
+
+string androidVersion = "";
+string ffmpegPath = "";
+string makeOpts = "-j12";
+
+version(Windows){string make = "mingw32-make ";}
+else{string make = "make ";}
+int main(string[] args)
+{
+    string buildTarget = "";
+    if(args.length < 3)
+    {
+        showUsage();
+        return SUCCESS;
+    }
+    else
+    {
+        androidVersion = args[1];
+        ffmpegPath = args[2];
+        if(args.length > 3)
+        {
+            buildTarget = args[3];
+            string* test = buildTarget in archs;
+            if(test is null)
+            {
+                writeln("Build target '"~buildTarget~"' is not valid.");
+                showUsage();
+                return ERROR;
+            }
+        }
+        else
+            writeln("Configuring build for all targets!This will take some time");
+
+    }
+    string sh = getShell();
+    string shOpts = "";
+    if(countUntil(sh, "Git") != -1)
+        shOpts = " -c "; //This switch is needed for using git shell as execution only
+    else
+    {
+        version(Windows)
+        {
+            shOpts = " -l -c ";
+        }
+    }
     auto ret = executeShell(make);
     //Includes mingw32-make err code(2) and make err code(1)
     if(ret.status < 0 || ret.status > 2 )
         return err(`No '`~make~`' command was found in system
 If you believe that this message is a error, please contact the repository mantainer`);
-
+    
+    //Include shell for windows commands
     outputPath = getcwd()~"/"~outputPath;
+
     version(Windows)
     {
         string mingwStyle(Captures!string cap)
@@ -264,6 +343,10 @@ If you believe that this message is a error, please contact the repository manta
             return cap.hit.toLower[0..1];
         }
         outputPath = "/"~outputPath.replace!(mingwStyle)(regex(".:"));
+        chdir(ffmpegPath);
+        ffmpegPath = getcwd().replaceAll(regex("\\\\"), "/")~"/";
+        ffmpegPath = "/"~ffmpegPath.replace!(mingwStyle)(regex(".:"));
+        ffmpegPath = "cd "~ffmpegPath~" && ./";
     }
 
     string ndk = getNDK();
@@ -271,7 +354,7 @@ If you believe that this message is a error, please contact the repository manta
         return err(format!`Could not get any of the available NDK's variable.
 Please, define one of the following ndk variables:
 %s`(ndk_env_aliases));
-    else
+       else
         writeln("NDK Path: ", ndk);
 
     string toolchainPath = getToolchainPath(ndk);
@@ -280,8 +363,44 @@ Please, define one of the following ndk variables:
     
 
     // writeln(toolchainPath);
-    writeln(buildConfigCommand("x86", "21", toolchainPath, outputPath));
-    
-    
+    version(Windows)
+    {
+        string shMake = sh~" -c \""~make;
+    }
+    else
+    {
+        string shMake = make;
+    }
+    if(buildTarget == "")
+    {
+        foreach(key, value; archs)
+        {
+            if(exists(outputPath~archsFolders[key]))
+            {
+                writeln("'"~key~"' already exists, skipping");
+                continue;
+            }
+            writeln("Cleaning build "~shMake~" clean\"");
+            wait(spawnShell(shMake~ " clean\""));
+            string buildCmd = buildConfigCommand(key, androidVersion, toolchainPath, outputPath);
+            string configure = sh~shOpts~"\""~ffmpegPath~"configure "~buildCmd~"\"";
+            writeln("Configuring build with... \n"~configure);
+            wait(spawnShell(configure));
+            wait(spawnShell(make ~ " "~ makeOpts));
+            wait(spawnShell(make~ " install"));
+        }
+    }
+    else
+    {
+        writeln("Cleaning build with: "~shMake~" clean\"");
+        wait(spawnShell(shMake~ " clean\""));
+        string buildCmd = buildConfigCommand(buildTarget, androidVersion, toolchainPath, outputPath);
+        string configure = sh~shOpts~"\""~ffmpegPath~"configure "~buildCmd~"\"";
+        writeln("Configuring build with... \n"~configure);
+        wait(spawnShell(configure));
+        wait(spawnShell(shMake ~ " "~ makeOpts~"\""));
+        wait(spawnShell(shMake~ " install\""));
+    }
+
     return SUCCESS;
 }
