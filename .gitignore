@@ -14,3 +14,4 @@ opensles_interface-test-*
 *.o
 *.obj
 *.lst
+source/ffmpeg/build/

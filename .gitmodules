@@ -4,3 +4,6 @@
 [submodule "external/ffmpeg"]
 	path = external/ffmpeg
 	url = git://source.ffmpeg.org/ffmpeg.git
+[submodule "external/ffmpeg-d"]
+	path = external/ffmpeg-d
+	url = https://github.com/ljubobratovicrelja/ffmpeg-d.git
